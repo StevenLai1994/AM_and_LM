@@ -9,33 +9,41 @@ from utils import decode_ctc, GetEditDistance
 # 0.准备解码所需字典，参数需和训练一致，也可以将字典保存到本地，直接进行读取
 from utils import get_data, data_hparams
 data_args = data_hparams()
+data_args.thchs30 = True
+data_args.aishell = True
+data_args.prime = True
+data_args.stcmd = False
+data_args.data_length = None
 train_data = get_data(data_args)
 
 
-# 1.声学模型-----------------------------------
-from model_speech.cnn_ctc import Am, am_hparams
+def load_am():
+    # 1.声学模型-----------------------------------
+    from model_speech.cnn_ctc import Am, am_hparams
 
-am_args = am_hparams()
-am_args.vocab_size = len(train_data.am_vocab)
-am = Am(am_args)
-print('loading acoustic model...')
-am.ctc_model.load_weights('logs_am/model.h5')
+    am_args = am_hparams()
+    am_args.vocab_size = len(train_data.am_vocab)
+    am = Am(am_args)
+    print('loading acoustic model...')
+    am.ctc_model.load_weights('logs_am/model.h5')
 
-# 2.语言模型-------------------------------------------
-from model_language.transformer import Lm, lm_hparams
+def load_lm():
+    # 2.语言模型-------------------------------------------
+    from model_language.transformer import Lm, lm_hparams
 
-lm_args = lm_hparams()
-lm_args.input_vocab_size = len(train_data.pny_vocab)
-lm_args.label_vocab_size = len(train_data.han_vocab)
-lm_args.dropout_rate = 0.
-print('loading language model...')
-lm = Lm(lm_args)
-sess = tf.Session(graph=lm.graph)
-with lm.graph.as_default():
-    saver =tf.train.Saver()
-with sess.as_default():
-    latest = tf.train.latest_checkpoint('logs_lm')
-    saver.restore(sess, latest)
+    lm_args = lm_hparams()
+    lm_args.input_vocab_size = len(train_data.pny_vocab)
+    lm_args.label_vocab_size = len(train_data.han_vocab)
+    lm_args.dropout_rate = 0.
+    print('loading language model...')
+    lm = Lm(lm_args)
+    sess = tf.Session(graph=lm.graph)
+    with lm.graph.as_default():
+        saver =tf.train.Saver()
+    with sess.as_default():
+        latest = tf.train.latest_checkpoint('logs_lm')
+        saver.restore(sess, latest)
+    return sess, lm
 
 # 3. 准备测试所需数据， 不必和训练数据一致，通过设置data_args.data_type测试，
 #    此处应设为'test'，我用了'train'因为演示模型较小，如果使用'test'看不出效果，
@@ -80,4 +88,13 @@ def test_batch():
 
 
 if __name__ == '__main__':
-    test_batch()
+    sess, lm = load_lm()
+    with sess.as_default():
+        while True:
+            text = input("输入拼音：\n")
+            text = text.strip('\n').split(' ')
+            x = np.array([train_data.pny_vocab.index(pny) for pny in text])
+            x = x.reshape(1, -1)
+            preds = sess.run(lm.preds, {lm.x: x})
+            got = ''.join(train_data.han_vocab[idx] for idx in preds[0])
+            print('识别结果：', got)

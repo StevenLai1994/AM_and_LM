@@ -11,9 +11,9 @@ data_args.data_type = 'train'
 data_args.thchs30 = True
 data_args.aishell = True
 data_args.prime = True
-data_args.stcmd = False
-data_args.batch_size = 8
-data_args.data_length = 16
+data_args.stcmd = True
+data_args.batch_size = 16
+data_args.data_length = None
 data_args.shuffle = True
 train_data = get_data(data_args)
 
@@ -25,8 +25,8 @@ data_args.thchs30 = True
 data_args.aishell = True
 data_args.prime = False
 data_args.stcmd = False
-data_args.batch_size = 8
-data_args.data_length = 16
+data_args.batch_size = 16
+data_args.data_length = None
 data_args.shuffle = True
 dev_data = get_data(data_args)
 
@@ -75,7 +75,7 @@ def train_lm(epochs):
 
     batch_num = len(train_data.wav_lst) // train_data.batch_size
     dev_batch_num = len(dev_data.wav_lst) // dev_data.batch_size
-
+    pre_epoch = 0
     with lm.graph.as_default():
         saver =tf.train.Saver(max_to_keep=5)
     with tf.Session(graph=lm.graph) as sess:
@@ -84,8 +84,9 @@ def train_lm(epochs):
             # 恢复变量
             import re
             model_file = tf.train.latest_checkpoint('logs_lm')
-            add_num = int(re.findall('\d+', model_file)[0])
-            print("================================restore latest save model, epoch=%d==============================" % add_num)
+            pre_epoch = int(re.findall('\d+', model_file)[0])
+            min_loss = float(re.findall('\d+\.+\d*', model_file)[0])
+            print("=====================restore latest save model, epoch=%d===loss=%.3f==================" % (pre_epoch, min_loss))
             saver.restore(sess, model_file)
         else:
             # 初始化变量
@@ -94,7 +95,7 @@ def train_lm(epochs):
         min_loss = 100
         writer = tf.summary.FileWriter('logs_lm/tensorboard', tf.get_default_graph())
 
-        for k in range(epochs - add_num - 1):
+        for k in range(pre_epoch, epochs):
             #训练==============================================
             total_loss = 0
             batch = train_data.get_lm_batch()                                                                                                                                                 
@@ -107,7 +108,7 @@ def train_lm(epochs):
                     rs=sess.run(merged, feed_dict=feed)                                                                                                                                       
                     writer.add_summary(rs, k * batch_num + i)                                                                                                                                 
                 if (i+1) % 500 == 0:
-                    print('epoch:{:04d}, step:{:05d}, train_loss:{:0.3f}'.format(k, i, total_loss/i))
+                    print('epoch:{:04d}, step:{:05d}, train_loss:{:0.3f}'.format(k+1, i, total_loss/i))
             epoch_loss = total_loss/batch_num                                                                                                                                                 
             print('epochs', k+1, ': average loss = ', epoch_loss) 
 
@@ -122,12 +123,12 @@ def train_lm(epochs):
                 if (i+1) % 500 == 0:
                     print("dev_step:{:05d}, dev_loss:{:0.3f}".format(i, total_loss/i))
             print('dev_loss:{:.3f}'.format(total_loss / dev_batch_num))
-            if total_loss/batch_num < min_loss:
-                min_loss = total_loss/batch_num
+            if total_loss/dev_batch_num < min_loss:
+                min_loss = total_loss/dev_batch_num
                 print("save model")                                                                                                                                    
-                saver.save(sess, 'logs_lm/model_epoch_{:04d}_val_loss_{:0.3f}'.format(k + add_num + 1, min_loss))
+                saver.save(sess, 'logs_lm/model_epoch_{:04d}_val_loss_{:0.3f}'.format(k + 1, min_loss))
 
         writer.close()                                                 
 
 if __name__ == '__main__':
-    train_lm(10)
+    train_lm(100)

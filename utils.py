@@ -23,6 +23,22 @@ def data_hparams():
         shuffle=True)
     return params
 
+def make_vocabs():
+    pinyin_table = ['<PAD>']
+    hanzi_table = ['<PAD>']
+    for file_name in os.listdir('data'):
+        path = os.path.join('data', file_name)
+        with open(path, 'r', encoding='UTF-8') as fin:
+            for line in fin.readlines():
+                _, pys, hzs = line.split('\t')
+                for py in pys.split():
+                    if py not in pinyin_table:
+                        pinyin_table.append(py)
+                for hz in hzs.strip('\n'):
+                    if hz not in hanzi_table:
+                        hanzi_table.append(hz)
+    return pinyin_table, hanzi_table
+
 
 class get_data():
     def __init__(self, args):
@@ -76,12 +92,12 @@ class get_data():
             self.wav_lst = self.wav_lst[:self.data_length]
             self.pny_lst = self.pny_lst[:self.data_length]
             self.han_lst = self.han_lst[:self.data_length]
+
+        print('make pinyin and hanzi vocab...')
+        self.pny_vocab, self.han_vocab = make_vocabs()
         print('make am vocab...')
-        self.am_vocab = self.mk_am_vocab(self.pny_lst)
-        print('make lm pinyin vocab...')
-        self.pny_vocab = self.mk_lm_pny_vocab(self.pny_lst)
-        print('make lm hanzi vocab...')
-        self.han_vocab = self.mk_lm_han_vocab(self.han_lst)
+        self.am_vocab = self.pny_vocab.copy()
+
 
     def get_am_batch(self):
         shuffle_list = [i for i in range(len(self.wav_lst))]
@@ -159,7 +175,7 @@ class get_data():
     def mk_am_vocab (self, data):
         print('loading lang...')
         pinyin_list = []
-        with open('pinyin/pinyin.txt', 'r', encoding='utf-8') as file_object:
+        with open('vocabs/pinyin.txt', 'r', encoding='utf-8') as file_object:
             for pinyin in tqdm(file_object):
                 pinyin_list.append(pinyin.rstrip('\n'))
         pinyin_list.append('_')
